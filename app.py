@@ -46,9 +46,14 @@ def categorize(description):
 
 # --- Functions ---
 def add_transactions(df):
-    df = df[['Date', 'Description', 'Category', 'Amount']]
-    df['Date'] = pd.to_datetime(df['Date']).dt.strftime('%Y-%m-%d')
-    # Fill missing categories
+    expected_cols = ['Date', 'Description', 'Category', 'Amount']
+    for col in expected_cols:
+        if col not in df.columns:
+            st.warning(f"Column '{col}' missing from uploaded file. Filling with blanks.")
+            df[col] = ''
+
+    df = df[expected_cols]
+    df['Date'] = pd.to_datetime(df['Date'], errors='coerce').dt.strftime('%Y-%m-%d')
     df['Category'] = df['Category'].fillna(df['Description'].apply(categorize))
     df.to_sql('transactions', conn, if_exists='append', index=False)
 
@@ -83,7 +88,7 @@ if uploaded_files:
 data = get_transactions()
 removed_merchants = get_removed_merchants()
 filtered_data = data[~data['description'].isin(removed_merchants)]
-filtered_data['Month'] = pd.to_datetime(filtered_data['date']).dt.to_period('M')
+filtered_data['Month'] = pd.to_datetime(filtered_data['date'], errors='coerce').dt.to_period('M')
 
 # --- Dashboard ---
 st.header("📈 Dashboard Overview")
@@ -112,14 +117,14 @@ search = st.text_input("Enter merchant name")
 if search:
     merchant_data = data[data['description'].str.contains(search, case=False)]
     total_merchant = merchant_data['amount'].sum()
-    avg_merchant = merchant_data.groupby(pd.to_datetime(merchant_data['date']).dt.to_period('M'))['amount'].sum().mean()
+    avg_merchant = merchant_data.groupby(pd.to_datetime(merchant_data['date'], errors='coerce').dt.to_period('M'))['amount'].sum().mean()
     st.write(f"**Total Spending at {search}:** ${total_merchant:,.2f}")
     st.write(f"**Average Monthly Spending at {search}:** ${avg_merchant:,.2f}")
     st.dataframe(merchant_data)
 
     # Merchant trend chart
     if not merchant_data.empty:
-        merchant_monthly = merchant_data.groupby(pd.to_datetime(merchant_data['date']).dt.to_period('M'))['amount'].sum().reset_index()
+        merchant_monthly = merchant_data.groupby(pd.to_datetime(merchant_data['date'], errors='coerce').dt.to_period('M'))['amount'].sum().reset_index()
         merchant_monthly['date'] = merchant_monthly['date'].astype(str)
         fig_merchant = px.line(merchant_monthly, x='date', y='amount', title=f"{search} Monthly Spending Trend")
         st.plotly_chart(fig_merchant, use_container_width=True)
